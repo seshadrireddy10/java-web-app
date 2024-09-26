@@ -1,12 +1,11 @@
 pipeline {
-  agent { label 'macos' }
+  agent { label 'master' }
   options {
     buildDiscarder(logRotator(numToKeepStr: '5'))
   }
   environment {
-    DOCKER_HUB_CREDS = credentials('darinpope-docker-hub')
-    AWS_CREDS = credentials('darinpope-aws-creds')
-    KEYCHAIN_PASSWORD = credentials('darinpope-keychain')
+    DOCKER_HUB_CREDS = credentials('docker-hub-password')
+    AWS_CREDS = credentials('nkwochidubem-aws-cred')
   }
   stages {
     stage('Tooling versions') {
@@ -17,29 +16,23 @@ pipeline {
         '''
       }
     }
-    stage('Unlock keychain') {
-      steps {
-        sh 'security -v unlock-keychain -p $KEYCHAIN_PASSWORD ~/Library/Keychains/login.keychain-db'
-      }
-    }
     stage('Build') {
       steps {
+        sh 'docker context ls'
         sh 'docker context use default'
+        sh 'echo $DOCKER_HUB_CREDS | docker login --username=nkwochidubem --password-stdin docker.io'
         sh 'docker compose build'
         sh 'docker compose push'
       }
     }
     stage('Deploy') {
       steps {
+        sh 'docker context create ecs myecscontext --from-env'
         sh 'docker context use myecscontext'
         sh 'docker compose up'
         sh 'docker compose ps --format json'
+        sh 'docker compose down'
       }
-    }
-  }
-  post {
-    always {
-        sh 'security -v lock-keychain ~/Library/Keychains/login.keychain-db'
     }
   }
 }
